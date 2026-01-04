@@ -312,11 +312,18 @@
         spriteImg.src = 'sprites/graficos.png';
 
         const shipSprite = { sx: 404, sy: 392, sw: 118, sh: 160 };
-        const enemySpriteDef = { sx: 542, sy: 170, sw: 28, sh: 28 };
         const xpSpriteDef = { sx: 409, sy: 591, sw: 10, sh: 10 };
         const bulletSmall = { sx: 856, sy: 389, sw: 10, sh: 19 };
         const bulletMedium = { sx: 834, sy: 383, sw: 4, sh: 10 };
         const bulletLarge = { sx: 129, sy: 18, sw: 55, sh: 42 };
+
+        // const enemySpriteDef = { sx: 542, sy: 170, sw: 28, sh: 28 };
+        const enemySprites = {
+            normal: { sx: 542, sy: 170, sw: 28, sh: 28 },
+            elite: { sx: 554, sy: 25, sw: 92, sh: 92 },
+            tank: { sx: 297, sy: 521, sw: 93, sh: 93 },
+            boss: { sx: 684, sy: 279, sw: 119, sh: 74 }
+        };
 
         const starSprites = [
             { sx: 129, sy: 18, sw: 55, sh: 42 },
@@ -399,22 +406,56 @@
 
         let enemies = [];
         let bullets = [];
+        let enemyBullets = [];
         let explosions = [];
         let particles = [];
         let loot = [];
 
+        // SISTEMA DE HORDA 
+
+        let waveEnemyHP = 5;
+
+        let wave = 1;
+        let enemiesToSpawn = 0;
+        let waveInProgress = false;
+        let spawnCooldown = 0;
+
+        let waveBanner = {
+            active: false,
+            timer: 0,
+            duration: 120, // frames (~2s)
+            text: ''
+        };
+
+
         const MAX_PARTICLES = 400;
-        const MAX_ENEMIES = 85;
+        // const MAX_ENEMIES = 85;
 
         const keys = {};
         const mouse = { x: 0, y: 0 };
 
+        // let pauseLock = false;
+
         window.onkeydown = e => {
-            keys[e.key.toLowerCase()] = true;
-            if (e.key.toLowerCase() === 'p' && gameState === 'playing') togglePause();
+            const key = e.key.toLowerCase();
+
+            if (keys[key]) return; // evita repetição
+            keys[key] = true;
+
+            if ((key === 'p' || key === 'escape') && gameState === 'playing') {
+                togglePause();
+            }
         };
-        window.onkeyup = e => keys[e.key.toLowerCase()] = false;
-        window.onmousemove = e => { mouse.x = e.clientX; mouse.y = e.clientY; };
+
+        window.onkeyup = e => {
+            const key = e.key.toLowerCase();
+            keys[key] = false;
+        };
+
+        window.onmousemove = e => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        };
 
         // --- FUNÇÃO PARA SINCRONIZAR O HUD ---
         function updateHUD() {
@@ -430,6 +471,8 @@
             isTestMode = (mode === 'test');
             gameState = 'playing';
 
+
+
             if (isTestMode) {
                 upgrades.plasmaCannon = true;
                 upgrades.laserGun = true;
@@ -442,6 +485,9 @@
             document.getElementById('hud').style.display = 'block';
             document.getElementById('hintBox').style.display = 'block';
             document.getElementById('modeDisplay').innerText = isTestMode ? 'TESTE' : 'SOLO';
+
+            wave = 1;
+            startWave();
             // updateHUD();
             resize();
             renderUpgradeHUD();
@@ -488,7 +534,65 @@
             });
         }
 
+        let bossAlive = false;
+
+        function spawnEnemy() {
+            const a = Math.random() * Math.PI * 2;
+            const typeKey = getEnemyType();
+
+            // NÃO deixa spawnar mais de um boss
+            if (typeKey === 'boss' && bossAlive) return;
+
+            const type = enemyTypes[typeKey];
+
+            if (typeKey === 'boss') bossAlive = true;
+
+            const baseHp = waveEnemyHP;
+            const baseSpeed = 2 + wave * 0.15 + level * 0.05;
+
+            const hitRadiusByType = {
+                normal: 22,
+                elite: 30,
+                tank: 80,
+                boss: 50
+            };
+
+            enemies.push({
+                x: camera.x + Math.cos(a) * 1000,
+                y: camera.y + Math.sin(a) * 1000,
+
+                hp: baseHp * type.hpMult,
+                maxHp: baseHp * type.hpMult,
+
+                r: hitRadiusByType[typeKey],
+                s: baseSpeed * type.speedMult,
+
+                hitTimer: 0,
+                hpBarTimer: 0,
+
+                angle: 0,
+
+                orbitAngle: Math.random() * Math.PI * 2,
+                fireCd: 0,
+
+                type: typeKey,
+                sprite: enemySprites[type.sprite],
+
+                // ===== BOSS STATE =====
+                state: typeKey === 'boss' ? 'intro' : 'normal',
+                introTimer: typeKey === 'boss' ? 60 : 0, // 3 segundos (60fps)
+
+                type: typeKey,
+                sprite: enemySprites[type.sprite]
+            });
+        }
+
+
+
         function update() {
+            // =============================
+            // MOVIMENTO DO PLAYER
+            // =============================
             if (keys['w']) p1.y -= upgrades.moveSpeed;
             if (keys['s']) p1.y += upgrades.moveSpeed;
             if (keys['a']) p1.x -= upgrades.moveSpeed;
@@ -501,12 +605,15 @@
             const worldMouseY = mouse.y - (canvas.height / 2) + camera.y;
             p1.angle = Math.atan2(worldMouseY - p1.y, worldMouseX - p1.x);
 
-            // TIROS
+            // =============================
+            // TIROS DO PLAYER
+            // =============================
             if (p1.cd > 0) p1.cd--;
             else {
                 bullets.push({
                     x: p1.x, y: p1.y,
-                    vx: Math.cos(p1.angle) * 12, vy: Math.sin(p1.angle) * 12,
+                    vx: Math.cos(p1.angle) * 12,
+                    vy: Math.sin(p1.angle) * 12,
                     angle: p1.angle + Math.PI / 2,
                     type: 'medium',
                     damage: upgrades.damage * 1.2
@@ -514,6 +621,77 @@
                 p1.cd = upgrades.fireRate;
             }
 
+            // =============================
+            // LÓGICA DE TIRO E ESTADO DOS INIMIGOS
+            // =============================
+            enemies.forEach(e => {
+                if (e.type === 'boss') {
+                    if (e.state === 'intro') {
+                        e.introTimer--;
+                        if (e.introTimer <= 0) {
+                            e.state = 'combat';
+                            e.fireCd = 60;
+                        }
+                        return; // Sai desta iteração, boss não atira na intro
+                    }
+                    // Se for boss e estiver em combate, chama a IA dele
+                    bossAI(e);
+                }
+            });
+
+            // Agora o loop das balas dos inimigos (que já estava quase certo)
+            for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                const b = enemyBullets[i];
+                b.x += b.vx;
+                b.y += b.vy;
+                b.life--;
+
+                const dx = b.x - p1.x;
+                const dy = b.y - p1.y;
+                if (dx * dx + dy * dy < 30 * 30) {
+                    hp -= 15;
+                    updateHUD();
+                    enemyBullets.splice(i, 1);
+                    if (hp <= 0) gameState = 'gameover';
+                    continue;
+                }
+
+                if (b.life <= 0 || Math.abs(b.x - camera.x) > 1300 || Math.abs(b.y - camera.y) > 1000) {
+                    enemyBullets.splice(i, 1);
+                }
+            }
+            for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                const b = enemyBullets[i];
+
+                b.x += b.vx;
+                b.y += b.vy;
+                b.life--;
+
+                // colisão com player
+                const dx = b.x - p1.x;
+                const dy = b.y - p1.y;
+                if (dx * dx + dy * dy < 30 * 30) {
+                    hp -= 15;
+                    updateHUD();
+                    enemyBullets.splice(i, 1);
+                    if (hp <= 0) gameState = 'gameover';
+                    continue;
+                }
+
+                // remove se acabar a vida ou sair da tela
+                if (
+                    b.life <= 0 ||
+                    Math.abs(b.x - camera.x) > 1300 ||
+                    Math.abs(b.y - camera.y) > 1000
+                ) {
+                    enemyBullets.splice(i, 1);
+                }
+            }
+
+
+            // =============================
+            // LASER
+            // =============================
             if (upgrades.laserGun) {
                 if (p1.laserCd > 0) p1.laserCd--;
                 else if (enemies.length > 0) {
@@ -521,7 +699,8 @@
                     const ang = Math.atan2(target.y - p1.y, target.x - p1.x);
                     bullets.push({
                         x: p1.x, y: p1.y,
-                        vx: Math.cos(ang) * 18, vy: Math.sin(ang) * 18,
+                        vx: Math.cos(ang) * 18,
+                        vy: Math.sin(ang) * 18,
                         angle: ang + Math.PI / 2,
                         type: 'small',
                         damage: upgrades.damage * upgrades.laserDamageMult
@@ -530,6 +709,9 @@
                 }
             }
 
+            // =============================
+            // PLASMA
+            // =============================
             if (upgrades.plasmaCannon) {
                 if (upgrades.plasmaCd > 0) upgrades.plasmaCd--;
                 else if (enemies.length > 0) {
@@ -537,7 +719,8 @@
                     const ang = Math.atan2(target.y - p1.y, target.x - p1.x);
                     bullets.push({
                         x: p1.x, y: p1.y,
-                        vx: Math.cos(ang) * 7, vy: Math.sin(ang) * 7,
+                        vx: Math.cos(ang) * 7,
+                        vy: Math.sin(ang) * 7,
                         angle: ang + Math.PI / 2,
                         type: 'large',
                         damage: upgrades.damage * upgrades.plasmaDamageMult
@@ -546,111 +729,250 @@
                 }
             }
 
-            for (let i = bullets.length - 1; i >= 0; i--) {
-                const b = bullets[i];
-                b.x += b.vx; b.y += b.vy;
-                let hit = false;
-                for (let j = enemies.length - 1; j >= 0; j--) {
-                    const e = enemies[j];
-                    const dx = b.x - e.x;
-                    const dy = b.y - e.y;
-                    if (dx * dx + dy * dy < (e.r + 15) * (e.r + 15)) {
-                        if (b.type === 'large') createExplosion(b.x, b.y, 150, b.damage);
-                        else {
-                            e.hp -= b.damage;
-                            e.hitTimer = 3;
-                        }
-                        hit = true; break;
-                    }
-                }
-                if (hit || Math.abs(b.x - camera.x) > 1200 || Math.abs(b.y - camera.y) > 900) bullets.splice(i, 1);
-            }
-
+            // =============================
+            // PARTÍCULAS / EXPLOSÕES
+            // =============================
             particles = particles.filter(p => {
-                p.x += p.vx; p.y += p.vy;
-                p.life--; return p.life > 0;
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                return p.life > 0;
             });
 
             explosions = explosions.filter(ex => {
-                ex.r += 7; ex.alpha -= 0.035;
+                ex.r += 7;
+                ex.alpha -= 0.035;
                 return ex.alpha > 0;
             });
 
-            if (enemies.length < MAX_ENEMIES && Math.random() < 0.04 + (level * 0.004)) {
-                const a = Math.random() * Math.PI * 2;
-                enemies.push({
-                    x: camera.x + Math.cos(a) * 1000 + (Math.random() - 0.5) * 50,
-                    y: camera.y + Math.sin(a) * 1000 + (Math.random() - 0.5) * 50,
-                    hp: 5 + (level * 2.2),
-                    r: 22,
-                    s: 2.5 + (Math.random() * level * 0.08),
-                    hitTimer: 0
-                });
+            // =============================
+            // SISTEMA DE HORDAS (SPAWN)
+            // =============================
+            if (waveInProgress) {
+                if (spawnCooldown <= 0 && enemiesToSpawn > 0) {
+                    spawnEnemy();
+                    enemiesToSpawn--;
+                    spawnCooldown = Math.max(8, 30 - wave * 2);
+                } else {
+                    spawnCooldown--;
+                }
             }
 
-            // SEPARAÇÃO DE INIMIGOS
-            for (let i = 0; i < enemies.length; i++) {
-                const e = enemies[i];
-                if (e.hitTimer > 0) e.hitTimer--;
+            // =====================================================
+            // ❌ NÃO DEFINIR FUNÇÃO DENTRO DO update()
+            // ❌ spawnEnemy() DEVE FICAR FORA (escopo global)
+            // =====================================================
 
-                const angToPlayer = Math.atan2(p1.y - e.y, p1.x - e.x);
-                let moveX = Math.cos(angToPlayer) * e.s;
-                let moveY = Math.sin(angToPlayer) * e.s;
+            // =============================
+            // MOVIMENTO + IA DOS INIMIGOS
+            // =============================
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.x += b.vx;
+                b.y += b.vy;
 
-                for (let j = 0; j < enemies.length; j++) {
-                    if (i === j) continue;
-                    const e2 = enemies[j];
-                    const dx = e2.x - e.x;
-                    const dy = e2.y - e.y;
-                    const distSq = dx * dx + dy * dy;
-                    const minDist = e.r + e2.r + 5;
+                let hit = false;
 
-                    if (distSq < minDist * minDist) {
-                        const dist = Math.sqrt(distSq) || 1;
-                        const force = (minDist - dist) / minDist;
-                        const ang = Math.atan2(dy, dx);
-                        moveX -= Math.cos(ang) * force * 2.5;
-                        moveY -= Math.sin(ang) * force * 2.5;
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const e = enemies[j];
+
+                    const dx = b.x - e.x;
+                    const dy = b.y - e.y;
+
+                    if (dx * dx + dy * dy < (e.r + 15) * (e.r + 15)) {
+
+                        // ===== BOSS INVENCÍVEL NA INTRO =====
+                        if (e.type === 'boss' && e.state === 'intro') {
+                            hit = true;   // bloqueia o tiro
+                            break;
+                        }
+
+                        // ===== DANO NORMAL =====
+                        e.hp -= b.damage;
+                        e.hitTimer = 3;
+                        e.hpBarTimer = 90;
+
+                        hit = true;
+                        break;
                     }
                 }
 
-                e.x += moveX;
-                e.y += moveY;
+                if (
+                    hit ||
+                    Math.abs(b.x - camera.x) > 1200 ||
+                    Math.abs(b.y - camera.y) > 900
+                ) {
+                    bullets.splice(i, 1);
+                }
             }
 
+
+            // =============================
+            // MORTE / DANO AO PLAYER
+            // =============================
             enemies = enemies.filter(e => {
                 if (e.hp <= 0) {
-                    loot.push({ x: e.x, y: e.y, value: 20 + (level * 2) });
-                    score += 20;
-                    updateHUD(); // Atualiza score no HUD
-                    for (let k = 0; k < 12; k++) createParticle(e.x, e.y, '#ff4400', 4, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, 12);
-                    return false;
+                    let xpValue = 20 + (level * 2); // Valor padrão
+                    let isBoss = (e.type === 'boss');
+
+                    if (isBoss) {
+                        bossAlive = false;
+                        score += 1000; // Pontuação bônus do Boss
+                        // Loop exclusivo para os vários cristais do Boss
+                        for (let i = 0; i < 10; i++) {
+                            loot.push({
+                                x: e.x + (Math.random() - 0.5) * 60,
+                                y: e.y + (Math.random() - 0.5) * 60,
+                                value: 50 // Cada um vale 50
+                            });
+                        }
+                    } else {
+                        // Lógica para inimigos que soltam apenas UM cristal
+                        if (e.type === 'elite') {
+                            xpValue = 60; // Elite vale mais
+                        } else if (e.type === 'tank') {
+                            xpValue = 100; // Tank vale ainda mais
+                        }
+
+                        loot.push({ x: e.x, y: e.y, value: xpValue });
+                        score += 20;
+                    }
+
+                    updateHUD();
+
+                    // Partículas de explosão (comum a todos)
+                    for (let k = 0; k < 12; k++) {
+                        createParticle(
+                            e.x, e.y, '#ff4400', 4,
+                            (Math.random() - 0.5) * 6,
+                            (Math.random() - 0.5) * 6,
+                            12
+                        );
+                    }
+
+                    return false; // Remove o inimigo da lista
                 }
 
                 const distSq = (p1.x - e.x) ** 2 + (p1.y - e.y) ** 2;
                 if (distSq < 42 * 42) {
                     hp -= 8;
-                    updateHUD(); // Atualiza vida no HUD imediatamente ao sofrer dano
+                    updateHUD();
                     if (hp <= 0) gameState = 'gameover';
                     return false;
                 }
                 return true;
             });
 
+            // =============================
+            // LOOT
+            // =============================
             loot = loot.filter(l => {
                 const distSq = (p1.x - l.x) ** 2 + (p1.y - l.y) ** 2;
                 if (distSq < upgrades.magnetRange * upgrades.magnetRange) {
-                    l.x += (p1.x - l.x) * 0.12; l.y += (p1.y - l.y) * 0.12;
+                    l.x += (p1.x - l.x) * 0.12;
+                    l.y += (p1.y - l.y) * 0.12;
                 }
                 if (distSq < 28 * 28) {
                     xp += l.value;
-                    updateHUD(); // Atualiza XP no HUD
+                    updateHUD();
                     if (xp >= nextLevelXp) levelUp();
                     return false;
                 }
                 return distSq <= 3500 * 3500;
             });
+
+            // =============================
+            // FIM DA HORDA
+            // =============================
+            if (waveInProgress && enemies.length === 0 && enemiesToSpawn === 0) {
+                waveInProgress = false;
+                score += wave * 50;
+                updateHUD();
+                wave++;
+                startWave();
+            }
         }
+
+        function bossAI(e) {
+            const dx = p1.x - e.x;
+            const dy = p1.y - e.y;
+
+
+
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const angleToPlayer = Math.atan2(dy, dx);
+
+            // ===== MIRAR SEMPRE NO PLAYER =====
+            e.angle = angleToPlayer;
+
+            // ===== MOVIMENTO DO BOSS =====
+            let moveAngle = angleToPlayer;
+
+            // perto demais → se afasta
+            if (dist < BOSS_MIN_DIST) {
+                moveAngle += Math.PI;
+            }
+            // longe demais → se aproxima
+            else if (dist > BOSS_MAX_DIST) {
+                // mantém moveAngle normal
+            }
+            // distância ideal → orbita
+            else {
+                e.orbitAngle += 0.01;
+                moveAngle = angleToPlayer + Math.PI / 0.02;
+            }
+
+            const speed = e.s * 0.8; // boss mais pesado
+
+            e.x += Math.cos(moveAngle) * speed;
+            e.y += Math.sin(moveAngle) * speed;
+
+            // ===== TIRO DO BOSS =====
+            if (e.fireCd > 0) {
+                e.fireCd--;
+            } else {
+                enemyBullets.push({
+                    x: e.x,
+                    y: e.y,
+                    vx: Math.cos(angleToPlayer) * 20,
+                    vy: Math.sin(angleToPlayer) * 20,
+                    life: 180
+                });
+
+                e.fireCd = 10; // cadência de tiro
+            }
+        }
+
+
+        const BOSS_MIN_DIST = 500; // perto demais → afasta
+        const BOSS_MAX_DIST = 760; // longe demais → aproxima
+
+
+        function startWave() { //Função que define a dificuldade da horda :: Isso escala: com a wave e com o level
+            waveInProgress = true;
+
+
+            waveEnemyHP =
+                5 +
+                wave * 2.2 +
+                level * 1.8;
+
+            enemiesToSpawn =
+                12 +
+                wave * 5 +
+                Math.floor(level * 1.5);
+
+            spawnCooldown = 0;
+            showWaveBanner();
+        }
+
+        function showWaveBanner() {
+            waveBanner.active = true;
+            waveBanner.timer = 0;
+            waveBanner.text = `⚠ PROTOCOLO DE DEFESA: HORDA ${wave} ⚠`;
+        }
+
+
 
         function levelUp() {
             gameState = 'paused';
@@ -750,12 +1072,20 @@
             document.getElementById('levelUpMenu').style.display = 'flex';
         }
 
+
+        function toS(x, y) {
+            return {
+                x: x - camera.x + canvas.width / 2,
+                y: y - camera.y + canvas.height / 2
+            };
+        }
         function draw() {
             ctx.fillStyle = bgPattern || '#050505';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.globalAlpha = 1;
 
             const cx = canvas.width / 2; const cy = canvas.height / 2;
-            const toS = (x, y) => ({ x: x - camera.x + cx, y: y - camera.y + cy });
+            // const toS = (x, y) => ({ x: x - camera.x + cx, y: y - camera.y + cy });
 
             particles.forEach(p => {
                 const s = toS(p.x, p.y);
@@ -813,23 +1143,24 @@
                 ctx.restore();
             });
 
+            // =============================
+            // DESENHAR BALAS DO BOSS
+            // =============================
+            enemyBullets.forEach(b => {
+                const p = toS(b.x, b.y);
+
+                ctx.beginPath();
+                ctx.fillStyle = '#ff3355';
+                ctx.arc(p.x, p.y, 10, 0, Math.PI * 20);
+                ctx.fill();
+            });
+
 
             loot.forEach(l => {
                 const p = toS(l.x, l.y);
                 if (spriteLoaded) ctx.drawImage(spriteImg, xpSpriteDef.sx, xpSpriteDef.sy, xpSpriteDef.sw, xpSpriteDef.sh, p.x - 10, p.y - 10, 20, 20);
             });
 
-            enemies.forEach(e => {
-                const p = toS(e.x, e.y);
-                if (spriteLoaded) {
-                    if (e.hitTimer > 0) {
-                        ctx.fillStyle = "white";
-                        ctx.beginPath(); ctx.arc(p.x, p.y, e.r, 0, Math.PI * 2); ctx.fill();
-                    } else {
-                        ctx.drawImage(spriteImg, enemySpriteDef.sx, enemySpriteDef.sy, enemySpriteDef.sw, enemySpriteDef.sh, p.x - 25, p.y - 25, 50, 50);
-                    }
-                }
-            });
 
             const pos = toS(p1.x, p1.y);
             ctx.save();
@@ -843,6 +1174,97 @@
             if (gameState === 'gameover') {
                 document.getElementById('finalScore').innerText = score;
                 document.getElementById('gameOverScreen').style.display = 'flex';
+            }
+
+            if (waveBanner.active) {
+                const t = waveBanner.timer / waveBanner.duration;
+
+                let alpha = 1;
+                if (t < 0.2) alpha = t / 0.2;           // fade in
+                else if (t > 0.8) alpha = (1 - t) / 0.2; // fade out
+
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                ctx.font = 'bold 64px Segoe UI';
+                ctx.fillStyle = '#00ffff';
+                ctx.shadowColor = '#00ffff';
+                ctx.shadowBlur = 25;
+
+                ctx.fillText(waveBanner.text, canvas.width / 2, canvas.height / 2);
+
+                ctx.restore();
+
+                waveBanner.timer++;
+                if (waveBanner.timer >= waveBanner.duration) {
+                    waveBanner.active = false;
+                }
+            }
+
+
+            enemies.forEach(drawEnemy);
+        }
+
+        function drawEnemy(e) {
+            if (!spriteLoaded) return;
+
+            const p = toS(e.x, e.y);
+            const s = e.sprite;
+
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(e.angle + Math.PI / 2);
+
+            // Flash de dano (sem piscar branco feio)
+            if (e.type === 'boss' && e.state === 'intro') {
+                ctx.globalAlpha = 0.5;
+            }
+
+            if (e.hitTimer > 0) ctx.globalAlpha = 0.7;
+
+            ctx.drawImage(
+                spriteImg,
+                s.sx, s.sy, s.sw, s.sh,
+                -s.sw,
+                -s.sh,
+                s.sw * 2,
+                s.sh * 2
+            );
+
+            ctx.restore();
+            ctx.globalAlpha = 1;
+
+            // ===== BARRA DE VIDA =====
+            if (
+                (e.type === 'elite' || e.type === 'tank' || e.type === 'boss') &&
+                e.hpBarTimer > 0
+            ) {
+                const barWidth = e.type === 'boss' ? 80 : 40;
+                const barHeight = 5;
+                const hpRatio = Math.max(0, e.hp / e.maxHp);
+                const shake = e.hitTimer > 0 ? Math.random() * 2 : 0;
+
+                ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                ctx.fillRect(
+                    p.x - barWidth / 2 + shake,
+                    p.y - e.r - 14,
+                    barWidth,
+                    barHeight
+                );
+
+                ctx.fillStyle =
+                    e.type === 'boss' ? '#ff0055' :
+                        e.type === 'tank' ? '#ffaa00' :
+                            '#00ffff';
+
+                ctx.fillRect(
+                    p.x - barWidth / 2 + shake,
+                    p.y - e.r - 14,
+                    barWidth * hpRatio,
+                    barHeight
+                );
             }
         }
 
@@ -864,19 +1286,58 @@
 
 
 
-        // function renderPauseUpgrades() {
-        //     const container = document.getElementById('pauseUpgrades');
-        //     container.innerHTML = '';
-        //     for (const [key, count] of Object.entries(activeUpgrades)) {
-        //         if (count > 0) {
-        //             const card = document.createElement('div');
-        //             card.className = 'pause-upgrade-card';
-        //             card.innerHTML = `<div class="icon-placeholder"></div>
-        //                       <span class="pause-upgrade-count">x${count}</span>`;
-        //             container.appendChild(card);
-        //         }
-        //     }
-        // }
+        function renderPauseUpgrades() {
+            const container = document.getElementById('pauseUpgrades');
+            container.innerHTML = '';
+            for (const [key, count] of Object.entries(activeUpgrades)) {
+                if (count > 0) {
+                    const card = document.createElement('div');
+                    card.className = 'pause-upgrade-card';
+                    card.innerHTML = `<div class="icon-placeholder"></div>
+                              <span class="pause-upgrade-count">x${count}</span>`;
+                    container.appendChild(card);
+                }
+            }
+        }
+        //INIMIGOS DEFINIDOS!
+
+        // DEFINIR TIPOS DE INIMIGO (CONFIGURAÇÃO)
+
+        const enemyTypes = {
+            normal: {
+                hpMult: 1,
+                speedMult: 1,
+                sprite: 'normal'
+            },
+            elite: {
+                hpMult: 2,
+                speedMult: 1.1,
+                sprite: 'elite'
+            },
+            tank: {
+                hpMult: 5,
+                speedMult: 0.6,
+                sprite: 'tank'
+            },
+            boss: {
+                hpMult: 90,
+                speedMult: 3,
+                sprite: 'boss'
+            }
+        };
+
+
+        // ESCOLHER O TIPO BASEADO NA HORDA
+
+        // Função que decide qual inimigo nasce:
+        function getEnemyType() {
+            if (wave % 10 === 0) return 'boss';
+            if (wave % 5 === 0 && Math.random() < 0.4) return 'tank';
+            if (wave > 5 && Math.random() < 0.25) return 'elite';
+            return 'normal';
+        }
+
+
 
         function renderUpgradeHUD() {
             const hud = document.getElementById('upgradeHUD');
@@ -908,8 +1369,6 @@
             draw();
             requestAnimationFrame(gameLoop);
         }
-
-
         resize();
     </script>
 </body>
