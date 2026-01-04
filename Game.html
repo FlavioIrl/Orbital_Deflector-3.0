@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orbital Deflector 3.0 - Balanced & Polished</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050505;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        #hud {
+            display: none;
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 20px;
+            color: #00ffff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+
+        #statusBars {
+            margin-top: 10px;
+        }
+
+        .bar-label {
+            font-size: 10px;
+            color: #aaa;
+            text-transform: uppercase;
+            margin-top: 5px;
+        }
+
+        .bar-bg {
+            width: 250px;
+            height: 10px;
+            background: #222;
+            border: 1px solid #444;
+            position: relative;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        #hpBar {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #ff0055, #ff5588);
+            transition: width 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        #xpBar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #00ffff, #0088ff);
+            transition: width 0.3s;
+        }
+
+        #mainMenu,
+        #levelUpMenu,
+        #pauseMenu,
+        #gameOverScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 10;
+        }
+
+        #mainMenu {
+            background: radial-gradient(circle, #111 0%, #000 100%);
+        }
+
+        #levelUpMenu,
+        #pauseMenu,
+        #gameOverScreen {
+            display: none;
+        }
+
+        .card-container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .card {
+            background: #111;
+            border: 2px solid #00ffff;
+            width: 220px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .card:hover {
+            transform: scale(1.05);
+            background: #1a1a1a;
+            border-color: #ffaa00;
+        }
+
+        .menu-btn {
+            background: transparent;
+            color: #00ffff;
+            border: 2px solid #00ffff;
+            padding: 15px 40px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+            margin: 10px;
+            transition: 0.3s;
+            min-width: 200px;
+        }
+
+        .menu-btn:hover {
+            background: #00ffff;
+            color: #000;
+            box-shadow: 0 0 20px #00ffff;
+        }
+
+        .btn-test {
+            border-color: #ffaa00;
+            color: #ffaa00;
+        }
+
+        .btn-test:hover {
+            background: #ffaa00;
+            box-shadow: 0 0 20px #ffaa00;
+        }
+
+        #gameOverScreen {
+            background: rgba(20, 0, 0, 0.95);
+        }
+
+        .controls-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            font-size: 12px;
+            color: #666;
+            display: none;
+        }
+
+        /* Barra de Upgrades no Topo durante o jogo */
+        #upgradeHUD {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 8px;
+            padding: 6px 14px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 20px;
+            border: 1px solid rgba(0, 255, 255, 0.2);
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .upgrade-icon {
+            width: 28px;
+            height: 28px;
+            position: relative;
+            border-radius: 4px;
+            background: rgba(0, 255, 255, 0.12);
+            border: 1px solid rgba(0, 255, 255, 0.6);
+            overflow: hidden;
+        }
+
+        .upgrade-icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .upgrade-count {
+            position: absolute;
+            bottom: 1px;
+            right: 2px;
+            font-size: 11px;
+            font-weight: bold;
+            color: #ffaa00;
+        }
+
+        /* Lista de Upgrades no Menu de Pausa */
+        #pauseUpgrades {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 80%;
+        }
+
+        .pause-upgrade-card {
+            background: #111;
+            border: 1px solid #00ffff;
+            padding: 10px;
+            text-align: center;
+            min-width: 70px;
+            border-radius: 8px;
+        }
+
+        .pause-upgrade-count {
+            display: block;
+            font-size: 16px;
+            font-weight: bold;
+            color: #ffaa00;
+            margin-top: 5px;
+        }
+
+        #hud,
+        #upgradeHUD,
+        #pauseMenu,
+        #levelUpMenu,
+        #gameOverScreen {
+            position: absolute;
+            z-index: 10;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="mainMenu">
+        <h1 style="font-size: 48px; margin-bottom: 30px;">Orbital Deflector 3.0</h1>
+        <p style="color: #666; margin-bottom: 40px;">SISTEMA BALANCEADO</p>
+        <button class="menu-btn" onclick="startGame('solo')">Modo Solo</button>
+        <button class="menu-btn btn-test" onclick="startGame('test')">Modo de Teste</button>
+    </div>
+    <div id="hud">
+        <h1>Orbital Deflector <span id="modeDisplay" style="font-size:0.6em"></span></h1>
+        <div id="statusBars">
+            <div class="bar-label">Integridade do Núcleo</div>
+            <div class="bar-bg">
+                <div id="hpBar"></div>
+            </div>
+            <div class="bar-label">Sincronização de Dados (XP)</div>
+            <div class="bar-bg">
+                <div id="xpBar"></div>
+            </div>
+        </div>
+        <p style="font-size: 12px; color: #666; margin-top: 10px;">Score: <span id="scoreVal">0</span> | Nível: <span
+                id="levelVal">1</span></p>
+    </div>
+    <div id="upgradeHUD"></div>
+
+
+    <div class="controls-hint" id="hintBox">
+        WASD: Mover | Mouse: Mirar | P: Pausa
+    </div>
+
+    <div id="levelUpMenu">
+        <h2 style="color: #ffaa00;">UPGRADE DISPONÍVEL</h2>
+        <div class="card-container" id="cardsBox"></div>
+    </div>
+
+    <div id="pauseMenu">
+        <h2 style="color: #00ffff;">SISTEMA PAUSADO</h2>
+        <p style="color: #666;">UPGRADES COLETADOS:</p>
+        <div id="pauseUpgrades"></div>
+        <button class="menu-btn" onclick="togglePause()">Retomar</button>
+
+    </div>
+
+    <div id="gameOverScreen">
+        <h2 style="color: #ff0055; font-size: 40px;">SISTEMA CRITICAMENTE DANIFICADO</h2>
+        <p>Pontuação Final: <span id="finalScore">0</span></p>
+        <button class="menu-btn" onclick="location.reload()">Reiniciar Terminal</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            generateBackground();
+        }
+        window.onresize = resize;
+
+        const spriteImg = new Image();
+        spriteImg.src = 'sprites/graficos.png';
+
+        const shipSprite = { sx: 404, sy: 392, sw: 118, sh: 160 };
+        const enemySpriteDef = { sx: 542, sy: 170, sw: 28, sh: 28 };
+        const xpSpriteDef = { sx: 409, sy: 591, sw: 10, sh: 10 };
+        const bulletSmall = { sx: 856, sy: 389, sw: 10, sh: 19 };
+        const bulletMedium = { sx: 834, sy: 383, sw: 4, sh: 10 };
+        const bulletLarge = { sx: 129, sy: 18, sw: 55, sh: 42 };
+
+        const starSprites = [
+            { sx: 129, sy: 18, sw: 55, sh: 42 },
+            { sx: 126, sy: 345, sw: 32, sh: 32 },
+            { sx: 100, sy: 188, sw: 21, sh: 20 }
+        ];
+
+        let spriteLoaded = false;
+        spriteImg.onload = () => { spriteLoaded = true; generateBackground(); };
+
+        let bgPattern;
+        function generateBackground() {
+            const bgCanvas = document.createElement('canvas');
+            const bgCtx = bgCanvas.getContext('2d');
+            bgCanvas.width = 1024; bgCanvas.height = 1024;
+            bgCtx.fillStyle = '#050505';
+            bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+
+            for (let i = 0; i < 500; i++) {
+                const x = Math.random() * bgCanvas.width;
+                const y = Math.random() * bgCanvas.height;
+                bgCtx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.8 + 0.2})`;
+                bgCtx.beginPath(); bgCtx.arc(x, y, Math.random() * 1.5, 0, Math.PI * 2); bgCtx.fill();
+            }
+
+            if (spriteLoaded) {
+                for (let i = 0; i < 25; i++) {
+                    const s = starSprites[Math.floor(Math.random() * starSprites.length)];
+                    const x = Math.random() * bgCanvas.width;
+                    const y = Math.random() * bgCanvas.height;
+                    const scale = 0.4 + Math.random() * 0.7;
+                    bgCtx.globalAlpha = 0.3 + Math.random() * 0.5;
+                    bgCtx.drawImage(spriteImg, s.sx, s.sy, s.sw, s.sh, x, y, s.sw * scale, s.sh * scale);
+                }
+            }
+            bgPattern = ctx.createPattern(bgCanvas, 'repeat');
+        }
+
+        // --- GAME STATE ---
+        let gameState = 'menu';
+        let isTestMode = false;
+        let score = 0;
+        let level = 1;
+        let xp = 0;
+        let nextLevelXp = 100;
+        let hp = 100;
+
+        const camera = { x: 0, y: 0, lerp: 0.1 };
+
+        const activeUpgrades = {
+            laser: 0,
+            plasma: 0,
+            speed: 0,
+            magnet: 0,
+            fireRate: 0,
+            damage: 0
+        };
+
+        const upgrades = {
+            magnetRange: 160,
+            plasmaCannon: false,
+            laserGun: false,
+            plasmaCd: 0,
+            moveSpeed: 4.5,
+            fireRate: 18,
+            damage: 1,
+            plasmaDamageMult: 4.5,
+            laserDamageMult: 0.35,
+            laserFireRate: 12,
+        };
+
+        const p1 = {
+            x: 0,
+            y: 0,
+            radius: 25,
+            angle: 0,
+            cd: 0,
+            laserCd: 0
+        };
+
+        let enemies = [];
+        let bullets = [];
+        let explosions = [];
+        let particles = [];
+        let loot = [];
+
+        const MAX_PARTICLES = 400;
+        const MAX_ENEMIES = 85;
+
+        const keys = {};
+        const mouse = { x: 0, y: 0 };
+
+        window.onkeydown = e => {
+            keys[e.key.toLowerCase()] = true;
+            if (e.key.toLowerCase() === 'p' && gameState === 'playing') togglePause();
+        };
+        window.onkeyup = e => keys[e.key.toLowerCase()] = false;
+        window.onmousemove = e => { mouse.x = e.clientX; mouse.y = e.clientY; };
+
+        // --- FUNÇÃO PARA SINCRONIZAR O HUD ---
+        function updateHUD() {
+            document.getElementById('hpBar').style.width = Math.max(0, hp) + '%';
+            document.getElementById('xpBar').style.width = Math.min(100, (xp / nextLevelXp) * 100) + '%';
+            document.getElementById('scoreVal').innerText = score;
+            document.getElementById('levelVal').innerText = level;
+
+            // renderUpgradeBar();
+        }
+
+        function startGame(mode) {
+            isTestMode = (mode === 'test');
+            gameState = 'playing';
+
+            if (isTestMode) {
+                upgrades.plasmaCannon = true;
+                upgrades.laserGun = true;
+                upgrades.damage = 10;
+                upgrades.fireRate = 4;
+                upgrades.laserFireRate = 2;
+            }
+
+            document.getElementById('mainMenu').style.display = 'none';
+            document.getElementById('hud').style.display = 'block';
+            document.getElementById('hintBox').style.display = 'block';
+            document.getElementById('modeDisplay').innerText = isTestMode ? 'TESTE' : 'SOLO';
+            // updateHUD();
+            resize();
+            renderUpgradeHUD();
+            gameLoop();
+        }
+
+        function togglePause() {
+            if (gameState === 'playing') {
+                gameState = 'paused';
+                renderPauseUpgrades(); // Atualiza a lista com quantidades no pause
+                renderUpgradeHUD();
+                document.getElementById('pauseMenu').style.display = 'flex';
+            } else if (gameState === 'paused') {
+                gameState = 'playing';
+                document.getElementById('pauseMenu').style.display = 'none';
+                gameLoop();
+            }
+        }
+
+        function createParticle(x, y, color, size, vx, vy, life) {
+            if (particles.length > MAX_PARTICLES) return;
+            particles.push({ x, y, color, size, vx, vy, life, maxLife: life });
+        }
+
+        function createExplosion(x, y, radius, damage) {
+            explosions.push({ x, y, r: 0, maxR: radius, alpha: 1 });
+            for (let i = 0; i < 15; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const spd = Math.random() * 5 + 2;
+                createParticle(x, y, '#ffaa00', Math.random() * 4, Math.cos(ang) * spd, Math.sin(ang) * spd, 25);
+            }
+            enemies.forEach(e => {
+                const dx = e.x - x;
+                const dy = e.y - y;
+                const distSq = dx * dx + dy * dy;
+                const radSum = radius + e.r;
+                if (distSq < radSum * radSum) {
+                    e.hp -= damage;
+                    e.hitTimer = 8;
+                    const ang = Math.atan2(dy, dx);
+                    e.x += Math.cos(ang) * 25;
+                    e.y += Math.sin(ang) * 25;
+                }
+            });
+        }
+
+        function update() {
+            if (keys['w']) p1.y -= upgrades.moveSpeed;
+            if (keys['s']) p1.y += upgrades.moveSpeed;
+            if (keys['a']) p1.x -= upgrades.moveSpeed;
+            if (keys['d']) p1.x += upgrades.moveSpeed;
+
+            camera.x += (p1.x - camera.x) * camera.lerp;
+            camera.y += (p1.y - camera.y) * camera.lerp;
+
+            const worldMouseX = mouse.x - (canvas.width / 2) + camera.x;
+            const worldMouseY = mouse.y - (canvas.height / 2) + camera.y;
+            p1.angle = Math.atan2(worldMouseY - p1.y, worldMouseX - p1.x);
+
+            // TIROS
+            if (p1.cd > 0) p1.cd--;
+            else {
+                bullets.push({
+                    x: p1.x, y: p1.y,
+                    vx: Math.cos(p1.angle) * 12, vy: Math.sin(p1.angle) * 12,
+                    angle: p1.angle + Math.PI / 2,
+                    type: 'medium',
+                    damage: upgrades.damage * 1.2
+                });
+                p1.cd = upgrades.fireRate;
+            }
+
+            if (upgrades.laserGun) {
+                if (p1.laserCd > 0) p1.laserCd--;
+                else if (enemies.length > 0) {
+                    let target = enemies[0];
+                    const ang = Math.atan2(target.y - p1.y, target.x - p1.x);
+                    bullets.push({
+                        x: p1.x, y: p1.y,
+                        vx: Math.cos(ang) * 18, vy: Math.sin(ang) * 18,
+                        angle: ang + Math.PI / 2,
+                        type: 'small',
+                        damage: upgrades.damage * upgrades.laserDamageMult
+                    });
+                    p1.laserCd = upgrades.laserFireRate;
+                }
+            }
+
+            if (upgrades.plasmaCannon) {
+                if (upgrades.plasmaCd > 0) upgrades.plasmaCd--;
+                else if (enemies.length > 0) {
+                    let target = enemies[Math.floor(Math.random() * Math.min(enemies.length, 5))];
+                    const ang = Math.atan2(target.y - p1.y, target.x - p1.x);
+                    bullets.push({
+                        x: p1.x, y: p1.y,
+                        vx: Math.cos(ang) * 7, vy: Math.sin(ang) * 7,
+                        angle: ang + Math.PI / 2,
+                        type: 'large',
+                        damage: upgrades.damage * upgrades.plasmaDamageMult
+                    });
+                    upgrades.plasmaCd = 110;
+                }
+            }
+
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.x += b.vx; b.y += b.vy;
+                let hit = false;
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const e = enemies[j];
+                    const dx = b.x - e.x;
+                    const dy = b.y - e.y;
+                    if (dx * dx + dy * dy < (e.r + 15) * (e.r + 15)) {
+                        if (b.type === 'large') createExplosion(b.x, b.y, 150, b.damage);
+                        else {
+                            e.hp -= b.damage;
+                            e.hitTimer = 3;
+                        }
+                        hit = true; break;
+                    }
+                }
+                if (hit || Math.abs(b.x - camera.x) > 1200 || Math.abs(b.y - camera.y) > 900) bullets.splice(i, 1);
+            }
+
+            particles = particles.filter(p => {
+                p.x += p.vx; p.y += p.vy;
+                p.life--; return p.life > 0;
+            });
+
+            explosions = explosions.filter(ex => {
+                ex.r += 7; ex.alpha -= 0.035;
+                return ex.alpha > 0;
+            });
+
+            if (enemies.length < MAX_ENEMIES && Math.random() < 0.04 + (level * 0.004)) {
+                const a = Math.random() * Math.PI * 2;
+                enemies.push({
+                    x: camera.x + Math.cos(a) * 1000 + (Math.random() - 0.5) * 50,
+                    y: camera.y + Math.sin(a) * 1000 + (Math.random() - 0.5) * 50,
+                    hp: 5 + (level * 2.2),
+                    r: 22,
+                    s: 2.5 + (Math.random() * level * 0.08),
+                    hitTimer: 0
+                });
+            }
+
+            // SEPARAÇÃO DE INIMIGOS
+            for (let i = 0; i < enemies.length; i++) {
+                const e = enemies[i];
+                if (e.hitTimer > 0) e.hitTimer--;
+
+                const angToPlayer = Math.atan2(p1.y - e.y, p1.x - e.x);
+                let moveX = Math.cos(angToPlayer) * e.s;
+                let moveY = Math.sin(angToPlayer) * e.s;
+
+                for (let j = 0; j < enemies.length; j++) {
+                    if (i === j) continue;
+                    const e2 = enemies[j];
+                    const dx = e2.x - e.x;
+                    const dy = e2.y - e.y;
+                    const distSq = dx * dx + dy * dy;
+                    const minDist = e.r + e2.r + 5;
+
+                    if (distSq < minDist * minDist) {
+                        const dist = Math.sqrt(distSq) || 1;
+                        const force = (minDist - dist) / minDist;
+                        const ang = Math.atan2(dy, dx);
+                        moveX -= Math.cos(ang) * force * 2.5;
+                        moveY -= Math.sin(ang) * force * 2.5;
+                    }
+                }
+
+                e.x += moveX;
+                e.y += moveY;
+            }
+
+            enemies = enemies.filter(e => {
+                if (e.hp <= 0) {
+                    loot.push({ x: e.x, y: e.y, value: 20 + (level * 2) });
+                    score += 20;
+                    updateHUD(); // Atualiza score no HUD
+                    for (let k = 0; k < 12; k++) createParticle(e.x, e.y, '#ff4400', 4, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, 12);
+                    return false;
+                }
+
+                const distSq = (p1.x - e.x) ** 2 + (p1.y - e.y) ** 2;
+                if (distSq < 42 * 42) {
+                    hp -= 8;
+                    updateHUD(); // Atualiza vida no HUD imediatamente ao sofrer dano
+                    if (hp <= 0) gameState = 'gameover';
+                    return false;
+                }
+                return true;
+            });
+
+            loot = loot.filter(l => {
+                const distSq = (p1.x - l.x) ** 2 + (p1.y - l.y) ** 2;
+                if (distSq < upgrades.magnetRange * upgrades.magnetRange) {
+                    l.x += (p1.x - l.x) * 0.12; l.y += (p1.y - l.y) * 0.12;
+                }
+                if (distSq < 28 * 28) {
+                    xp += l.value;
+                    updateHUD(); // Atualiza XP no HUD
+                    if (xp >= nextLevelXp) levelUp();
+                    return false;
+                }
+                return distSq <= 3500 * 3500;
+            });
+        }
+
+        function levelUp() {
+            gameState = 'paused';
+            xp = 0;
+            level++;
+            nextLevelXp = 100 + (level * 40) + Math.floor(level ** 1.8);
+            updateHUD();
+
+            const box = document.getElementById('cardsBox');
+            box.innerHTML = '';
+
+            // Lista de opções com IDs correspondentes ao objeto activeUpgrades
+            const ops = [
+                {
+                    id: 'laser',
+                    t: "Protocolo Laser",
+                    d: "Ativa/Melhora o laser: +25% de dano e tiro mais rápido.",
+                    a: () => {
+                        upgrades.laserGun = true;
+                        upgrades.laserDamageMult += 0.25;
+                        upgrades.laserFireRate = Math.max(4, upgrades.laserFireRate * 0.82);
+                        activeUpgrades.laser++; // Incrementa contador
+                    }
+                },
+                {
+                    id: 'plasma',
+                    t: "Canhão Pesado",
+                    d: "Ativa/Melhora o plasma: +100% de dano de explosão.",
+                    a: () => {
+                        upgrades.plasmaCannon = true;
+                        upgrades.plasmaDamageMult += 1.0;
+                        activeUpgrades.plasma++; // Incrementa contador
+                    }
+                },
+                {
+                    id: 'speed',
+                    t: "Impulso de Manobra",
+                    d: "Aumenta a velocidade de movimento em +1.0.",
+                    a: () => {
+                        upgrades.moveSpeed += 1.0;
+                        activeUpgrades.speed++; // Incrementa contador
+                    }
+                },
+                {
+                    id: 'magnet',
+                    t: "Imã de Detritos",
+                    d: "Alcance de coleta de XP aumentado em +75.",
+                    a: () => {
+                        upgrades.magnetRange += 75;
+                        activeUpgrades.magnet++; // Incrementa contador
+                    }
+                },
+                {
+                    id: 'heal',
+                    t: "Reparo de Casco",
+                    d: "Restaura 50% da integridade total do núcleo.",
+                    a: () => {
+                        hp = Math.min(100, hp + 50);
+                        updateHUD();
+                    }
+                },
+                {
+                    id: 'fireRate',
+                    t: "Célula de Recarga",
+                    d: "Reduz o intervalo do tiro manual (Metralhadora).",
+                    a: () => {
+                        upgrades.fireRate = Math.max(4, upgrades.fireRate - 2.5);
+                        activeUpgrades.fireRate++; // Incrementa contador
+                    }
+                },
+                {
+                    id: 'damage',
+                    t: "Módulo de Potência",
+                    d: "Dano de todas as armas aumentado em +25%.",
+                    a: () => {
+                        upgrades.damage += 0.25;
+                        activeUpgrades.damage++; // Incrementa contador
+                    }
+                }
+            ];
+
+            // Sorteia 3 opções e cria os cards
+            ops.sort(() => Math.random() - 0.5).slice(0, 3).forEach(o => {
+                const d = document.createElement('div');
+                d.className = 'card';
+                d.innerHTML = `<h3>${o.t}</h3><p>${o.d}</p>`;
+                d.onclick = () => {
+                    o.a();
+                    document.getElementById('levelUpMenu').style.display = 'none';
+                    gameState = 'playing';
+                    updateHUD();
+                    renderUpgradeHUD();
+                };
+
+                box.appendChild(d);
+            });
+            document.getElementById('levelUpMenu').style.display = 'flex';
+        }
+
+        function draw() {
+            ctx.fillStyle = bgPattern || '#050505';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const cx = canvas.width / 2; const cy = canvas.height / 2;
+            const toS = (x, y) => ({ x: x - camera.x + cx, y: y - camera.y + cy });
+
+            particles.forEach(p => {
+                const s = toS(p.x, p.y);
+                ctx.globalAlpha = p.life / p.maxLife;
+                ctx.fillStyle = p.color;
+                ctx.fillRect(s.x, s.y, p.size, p.size);
+            });
+            ctx.globalAlpha = 1.0;
+
+            explosions.forEach(ex => {
+                const p = toS(ex.x, ex.y);
+                ctx.beginPath();
+                ctx.fillStyle = `rgba(255, 120, 0, ${ex.alpha * 0.6})`;
+                ctx.arc(p.x, p.y, ex.r, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            bullets.forEach(b => {
+                const p = toS(b.x, b.y);
+
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate(b.angle);
+
+                if (spriteLoaded) {
+                    let s, scale;
+
+                    switch (b.type) {
+                        case 'small':
+                            s = bulletSmall;
+                            scale = 1.5;
+                            break;
+
+                        case 'medium':
+                            s = bulletMedium;
+                            scale = 3.5;
+                            break;
+
+                        case 'large':
+                            s = bulletLarge;
+                            scale = 1.2;
+                            break;
+                    }
+
+                    ctx.drawImage(
+                        spriteImg,
+                        s.sx, s.sy, s.sw, s.sh,
+                        -(s.sw * scale) / 2,
+                        -(s.sh * scale) / 2,
+                        s.sw * scale,
+                        s.sh * scale
+                    );
+                }
+
+                ctx.restore();
+            });
+
+
+            loot.forEach(l => {
+                const p = toS(l.x, l.y);
+                if (spriteLoaded) ctx.drawImage(spriteImg, xpSpriteDef.sx, xpSpriteDef.sy, xpSpriteDef.sw, xpSpriteDef.sh, p.x - 10, p.y - 10, 20, 20);
+            });
+
+            enemies.forEach(e => {
+                const p = toS(e.x, e.y);
+                if (spriteLoaded) {
+                    if (e.hitTimer > 0) {
+                        ctx.fillStyle = "white";
+                        ctx.beginPath(); ctx.arc(p.x, p.y, e.r, 0, Math.PI * 2); ctx.fill();
+                    } else {
+                        ctx.drawImage(spriteImg, enemySpriteDef.sx, enemySpriteDef.sy, enemySpriteDef.sw, enemySpriteDef.sh, p.x - 25, p.y - 25, 50, 50);
+                    }
+                }
+            });
+
+            const pos = toS(p1.x, p1.y);
+            ctx.save();
+            ctx.translate(pos.x, pos.y);
+            ctx.rotate(p1.angle + Math.PI / 2);
+            if (spriteLoaded) {
+                ctx.drawImage(spriteImg, shipSprite.sx, shipSprite.sy, shipSprite.sw, shipSprite.sh, -30, -40, 60, 80);
+            }
+            ctx.restore();
+
+            if (gameState === 'gameover') {
+                document.getElementById('finalScore').innerText = score;
+                document.getElementById('gameOverScreen').style.display = 'flex';
+            }
+        }
+
+        const upgradeImages = {
+            laser: new Image(),
+            plasma: new Image(),
+            speed: new Image(),
+            magnet: new Image(),
+            fireRate: new Image(),
+            damage: new Image()
+        };
+
+        upgradeImages.laser.src = "icones/dedo-duro.png";
+        upgradeImages.plasma.src = "icones/dedo-duro.png";
+        upgradeImages.speed.src = "icones/speedIcon.png";
+        upgradeImages.magnet.src = "icones/dedo-duro.png";
+        upgradeImages.fireRate.src = "icones/dedo-duro.png";
+        upgradeImages.damage.src = "icones/dedo-duro.png";
+
+
+
+        // function renderPauseUpgrades() {
+        //     const container = document.getElementById('pauseUpgrades');
+        //     container.innerHTML = '';
+        //     for (const [key, count] of Object.entries(activeUpgrades)) {
+        //         if (count > 0) {
+        //             const card = document.createElement('div');
+        //             card.className = 'pause-upgrade-card';
+        //             card.innerHTML = `<div class="icon-placeholder"></div>
+        //                       <span class="pause-upgrade-count">x${count}</span>`;
+        //             container.appendChild(card);
+        //         }
+        //     }
+        // }
+
+        function renderUpgradeHUD() {
+            const hud = document.getElementById('upgradeHUD');
+            hud.innerHTML = '';
+
+            for (const [key, count] of Object.entries(activeUpgrades)) {
+                if (count <= 0) continue;
+
+                const icon = document.createElement('div');
+                icon.className = 'upgrade-icon';
+
+                const img = document.createElement('img');
+                img.src = upgradeImages[key].src;
+
+                const qty = document.createElement('span');
+                qty.className = 'upgrade-count';
+                qty.textContent = 'x' + count;
+
+                icon.appendChild(img);
+                icon.appendChild(qty);
+                hud.appendChild(icon);
+            }
+        }
+
+        function gameLoop() {
+            if (gameState === 'playing') {
+                update();
+            }
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+
+        resize();
+    </script>
+</body>
+
+</html>
