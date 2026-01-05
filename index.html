@@ -315,13 +315,13 @@
         const xpSpriteDef = { sx: 409, sy: 591, sw: 10, sh: 10 };
         const bulletSmall = { sx: 856, sy: 389, sw: 10, sh: 19 };
         const bulletMedium = { sx: 834, sy: 383, sw: 4, sh: 10 };
-        const bulletLarge = { sx: 129, sy: 18, sw: 55, sh: 42 };
+        const bulletLarge = { sx: 237, sy: 92, sw: 22, sh: 50 };
 
         // const enemySpriteDef = { sx: 542, sy: 170, sw: 28, sh: 28 };
         const enemySprites = {
             normal: { sx: 542, sy: 170, sw: 28, sh: 28 },
-            elite: { sx: 554, sy: 25, sw: 92, sh: 92 },
-            tank: { sx: 297, sy: 521, sw: 93, sh: 93 },
+            elite: { sx: 297, sy: 521, sw: 93, sh: 93 },
+            tank: { sx: 554, sy: 25, sw: 92, sh: 92 },
             boss: { sx: 684, sy: 279, sw: 119, sh: 74 }
         };
 
@@ -329,6 +329,19 @@
             { sx: 129, sy: 18, sw: 55, sh: 42 },
             { sx: 126, sy: 345, sw: 32, sh: 32 },
             { sx: 100, sy: 188, sw: 21, sh: 20 }
+        ];
+
+
+        // No topo do script, junto com as outras variáveis de estado
+        let explosionAnimations = [];
+
+        // Defina as coordenadas dos frames da sua explosão (exemplo de 4 frames)
+        // Ajuste sx e sy conforme a posição real no seu 'graficos.png'
+        const explosionFrames = [
+            { sx: 239, sy: 139, sw: 98, sh: 81 },
+            { sx: 235, sy: 408, sw: 98, sh: 81 },
+            { sx: 4, sy: 559, sw: 98, sh: 81 },
+            { sx: 143, sy: 434, sw: 98, sh: 81 },
         ];
 
         let spriteLoaded = false;
@@ -475,7 +488,7 @@
 
             if (isTestMode) {
                 upgrades.plasmaCannon = true;
-                upgrades.laserGun = true;
+                // upgrades.laserGun = true;
                 upgrades.damage = 10;
                 upgrades.fireRate = 4;
                 upgrades.laserFireRate = 2;
@@ -503,7 +516,8 @@
             } else if (gameState === 'paused') {
                 gameState = 'playing';
                 document.getElementById('pauseMenu').style.display = 'none';
-                gameLoop();
+                // gameLoop();
+
             }
         }
 
@@ -764,7 +778,7 @@
             // =====================================================
 
             // =============================
-            // MOVIMENTO + IA DOS INIMIGOS
+            // MOVIMENTO DAS BALAS E DANO
             // =============================
             for (let i = bullets.length - 1; i >= 0; i--) {
                 const b = bullets[i];
@@ -772,40 +786,118 @@
                 b.y += b.vy;
 
                 let hit = false;
-
                 for (let j = enemies.length - 1; j >= 0; j--) {
                     const e = enemies[j];
-
                     const dx = b.x - e.x;
                     const dy = b.y - e.y;
 
                     if (dx * dx + dy * dy < (e.r + 15) * (e.r + 15)) {
-
-                        // ===== BOSS INVENCÍVEL NA INTRO =====
+                        // Boss invencível na intro
                         if (e.type === 'boss' && e.state === 'intro') {
-                            hit = true;   // bloqueia o tiro
+                            hit = true;
                             break;
                         }
-
-                        // ===== DANO NORMAL =====
                         e.hp -= b.damage;
                         e.hitTimer = 3;
                         e.hpBarTimer = 90;
-
                         hit = true;
                         break;
                     }
                 }
 
-                if (
-                    hit ||
-                    Math.abs(b.x - camera.x) > 1200 ||
-                    Math.abs(b.y - camera.y) > 900
-                ) {
+                if (hit || Math.abs(b.x - camera.x) > 1200 || Math.abs(b.y - camera.y) > 900) {
+                    // Se a bala atingiu um inimigo e é do tipo plasma, gera a explosão
+                    if (hit && b.type === 'large') {
+                        triggerExplosion(b.x, b.y, 120, b.damage);
+                    }
+
                     bullets.splice(i, 1);
                 }
             }
 
+            // =============================
+            // MOVIMENTO + IA DOS INIMIGOS
+            // =============================
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i];
+
+                // --- 1. ATUALIZAR TIMERS DE DANO (Para ele parar de piscar/ficar transparente) ---
+                if (e.hitTimer > 0) e.hitTimer--;
+                if (e.hpBarTimer > 0) e.hpBarTimer--;
+
+
+
+                // --- 2. LÓGICA DO BOSS ---
+                if (e.type === 'boss') {
+                    if (e.state === 'intro') {
+                        e.introTimer--;
+                        if (e.introTimer <= 0) e.state = 'combat';
+                    }
+
+                    const dx = p1.x - e.x;
+                    const dy = p1.y - e.y;
+                    const dist = Math.hypot(dx, dy);
+                    const desiredDist = 260;
+                    const speed = e.s;
+
+                    // Movimento de aproximação/afastamento do Boss
+                    if (dist > desiredDist + 40) {
+                        e.x += (dx / dist) * speed;
+                        e.y += (dy / dist) * speed;
+                    } else if (dist < desiredDist - 40) {
+                        e.x -= (dx / dist) * speed;
+                        e.y -= (dy / dist) * speed;
+                    }
+                    e.angle = Math.atan2(dy, dx);
+
+                } else {
+                    // --- 3. MOVIMENTO INIMIGOS NORMAIS ---
+                    const ang = Math.atan2(p1.y - e.y, p1.x - e.x);
+
+                    // Só se movem se NÃO estiverem sob efeito de knockback forte (opcional)
+                    // Ou simplesmente somamos o movimento normal:
+                    e.x += Math.cos(ang) * e.s;
+                    e.y += Math.sin(ang) * e.s;
+                    e.angle = ang;
+                }
+
+                // --- 4. APLICAR EMPURRÃO (KNOCKBACK) ---
+                // Se o hitTimer for alto, ele recebe uma força extra para trás
+                if (e.hitTimer > 0) {
+                    const knockbackAng = Math.atan2(e.y - p1.y, e.x - p1.x);
+                    e.x += Math.cos(knockbackAng) * 4; // Força do empurrão
+                    e.y += Math.sin(knockbackAng) * 4;
+                }
+
+                // --- LÓGICA DE SEPARAÇÃO (Para não ficarem um sobre o outro) ---
+                for (let j = 0; j < enemies.length; j++) {
+                    const outro = enemies[j];
+                    if (e === outro) continue; // Não comparar o inimigo com ele mesmo
+
+                    const dx = e.x - outro.x;
+                    const dy = e.y - outro.y;
+                    const distanciaSq = dx * dx + dy * dy;
+                    const distanciaMinima = e.r + outro.r; // Soma dos raios
+
+                    // Se a distância for menor que a soma dos raios (estão sobrepostos)
+                    if (distanciaSq < distanciaMinima * distanciaMinima) {
+                        const dist = Math.sqrt(distanciaSq) || 1; // Evita divisão por zero
+                        const forca = (distanciaMinima - dist) / 2; // O quanto eles devem se afastar
+
+                        // Calcula o ângulo da repulsão
+                        const angulo = Math.atan2(dy, dx);
+
+                        // Move levemente para fora
+                        const moveX = Math.cos(angulo) * 0.5; // 0.5 é a intensidade da repulsão
+                        const moveY = Math.sin(angulo) * 0.5;
+
+                        e.x += moveX;
+                        e.y += moveY;
+                        outro.x -= moveX;
+                        outro.y -= moveY;
+                    }
+                }
+            }
 
             // =============================
             // MORTE / DANO AO PLAYER
@@ -843,7 +935,7 @@
                     // Partículas de explosão (comum a todos)
                     for (let k = 0; k < 12; k++) {
                         createParticle(
-                            e.x, e.y, '#ff4400', 4,
+                            e.x, e.y, '#fff', 4,
                             (Math.random() - 0.5) * 6,
                             (Math.random() - 0.5) * 6,
                             12
@@ -892,12 +984,36 @@
                 startWave();
             }
         }
+        //====================================
+        // FUNÇÃO PARA CRIAR A EXPLOSÃO (LÓGICA + VISUAL)
+        //====================================
+
+        function triggerExplosion(x, y, radius, damage) {
+            // 1. Lógica de Dano em Área
+            enemies.forEach(e => {
+                const dx = e.x - x;
+                const dy = e.y - y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq < (radius + e.r) * (radius + e.r)) {
+                    e.hp -= damage;
+                    e.hitTimer = 10;
+                }
+            });
+
+            // 2. Adicionar a animação de Sprite à lista
+            explosionAnimations.push({
+                x: x,
+                y: y,
+                currentFrame: 0,
+                timer: 0,
+                frameSpeed: 4, // Quantos frames de jogo para mudar o sprite
+                scale: radius / 30 // Ajusta o tamanho do sprite ao raio da explosão
+            });
+        }
 
         function bossAI(e) {
             const dx = p1.x - e.x;
             const dy = p1.y - e.y;
-
-
 
             const dist = Math.sqrt(dx * dx + dy * dy);
             const angleToPlayer = Math.atan2(dy, dx);
@@ -952,15 +1068,9 @@
             waveInProgress = true;
 
 
-            waveEnemyHP =
-                5 +
-                wave * 2.2 +
-                level * 1.8;
+            waveEnemyHP = 3 + (wave * 1.5) + (level * 1.0);
 
-            enemiesToSpawn =
-                12 +
-                wave * 5 +
-                Math.floor(level * 1.5);
+            enemiesToSpawn = 12 + wave * 5 + Math.floor(level * 1.5)
 
             spawnCooldown = 0;
             showWaveBanner();
@@ -1085,7 +1195,7 @@
             ctx.globalAlpha = 1;
 
             const cx = canvas.width / 2; const cy = canvas.height / 2;
-            // const toS = (x, y) => ({ x: x - camera.x + cx, y: y - camera.y + cy });
+            // const toS = (x, y) => ({ x: x - bosscamera.x + cx, y: y - camera.y + cy });
 
             particles.forEach(p => {
                 const s = toS(p.x, p.y);
@@ -1160,6 +1270,32 @@
                 const p = toS(l.x, l.y);
                 if (spriteLoaded) ctx.drawImage(spriteImg, xpSpriteDef.sx, xpSpriteDef.sy, xpSpriteDef.sw, xpSpriteDef.sh, p.x - 10, p.y - 10, 20, 20);
             });
+
+            // ... seu código de desenho existente ...
+
+            explosionAnimations.forEach((anim, index) => {
+                const p = toS(anim.x, anim.y);
+                const frame = explosionFrames[anim.currentFrame];
+
+                ctx.drawImage(
+                    spriteImg,
+                    frame.sx, frame.sy, frame.sw, frame.sh, // Recorte original
+                    p.x - (frame.sw * anim.scale) / 2,      // Posição X centrada usando o sw real
+                    p.y - (frame.sh * anim.scale) / 2,      // Posição Y centrada usando o sh real
+                    frame.sw * anim.scale,                  // Largura de destino BASEADA NO FRAME
+                    frame.sh * anim.scale                   // Altura de destino BASEADA NO FRAME
+                );
+
+                // Avançar animação
+                anim.timer++;
+                if (anim.timer >= anim.frameSpeed) {
+                    anim.timer = 0;
+                    anim.currentFrame++;
+                }
+            });
+
+            // Remover animações terminadas
+            explosionAnimations = explosionAnimations.filter(a => a.currentFrame < explosionFrames.length);
 
 
             const pos = toS(p1.x, p1.y);
@@ -1277,7 +1413,7 @@
             damage: new Image()
         };
 
-        upgradeImages.laser.src = "icones/dedo-duro.png";
+        upgradeImages.laser.src = "icones/teste.png";
         upgradeImages.plasma.src = "icones/dedo-duro.png";
         upgradeImages.speed.src = "icones/speedIcon.png";
         upgradeImages.magnet.src = "icones/dedo-duro.png";
@@ -1310,12 +1446,12 @@
                 sprite: 'normal'
             },
             elite: {
-                hpMult: 2,
+                hpMult: 1.5,
                 speedMult: 1.1,
                 sprite: 'elite'
             },
             tank: {
-                hpMult: 5,
+                hpMult: 4,
                 speedMult: 0.6,
                 sprite: 'tank'
             },
