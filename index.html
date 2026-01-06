@@ -274,8 +274,8 @@
 <body>
 
     <div id="mainMenu">
-        <h1 style="font-size: 48px; margin-bottom: 30px;">Orbital Deflector 3.0</h1>
-        <p style="color: #666; margin-bottom: 40px;">SISTEMA BALANCEADO</p>
+        <h1 style="font-size: 48px; margin-bottom: 30px;">Orbital Deflector</h1>
+        <p style="color: #666; margin-bottom: 40px;">SISTEMA FOI PRO CARALHO</p>
         <button class="menu-btn" onclick="startGame('solo')">Modo Solo</button>
         <button class="menu-btn btn-test" onclick="startGame('test')">Modo de Teste</button>
     </div>
@@ -295,6 +295,18 @@
                 id="levelVal">1</span></p>
     </div>
     <div id="upgradeHUD"></div>
+    <div id="bossHUD"
+        style="display: none; position: absolute; top: 60px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 10;">
+        <div
+            style="color: #ff0055; font-weight: bold; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 5px; text-shadow: 0 0 10px #ff0055;">
+            Sentinela de Combate</div>
+        <div class="bar-bg"
+            style="width: 500px; height: 15px; border-color: #ff0055; box-shadow: 0 0 15px rgba(255, 0, 85, 0.3);">
+            <div id="bossHpBar"
+                style="width: 100%; height: 100%; background: linear-gradient(90deg, #ff0055, #990022); transition: width 0.1s;">
+            </div>
+        </div>
+    </div>
 
 
     <div class="controls-hint" id="hintBox">
@@ -481,7 +493,29 @@
             document.getElementById('scoreVal').innerText = score;
             document.getElementById('levelVal').innerText = level;
 
-            // renderUpgradeBar();
+            document.getElementById('hpBar').style.width = Math.max(0, hp) + '%';
+            document.getElementById('xpBar').style.width = Math.min(100, (xp / nextLevelXp) * 100) + '%';
+            document.getElementById('scoreVal').innerText = score;
+            document.getElementById('levelVal').innerText = level;
+
+            // --- NOVA LÓGICA DO BOSS NA UPDATEHUD ---
+            const bossHud = document.getElementById('bossHUD');
+            // Procuramos o objeto que tem o tipo 'boss'
+            const bossEntity = enemies.find(e => e.type === 'boss');
+
+            if (bossAlive && bossEntity) {
+                bossHud.style.display = 'block';
+
+                // Calculamos a porcentagem: (Vida Atual / Vida Máxima) * 100
+                const pct = (bossEntity.hp / bossEntity.maxHp) * 100;
+
+                // Atualizamos a largura da barra
+                document.getElementById('bossHpBar').style.width = Math.max(0, pct) + '%';
+
+            } else {
+                // Se o boss morreu ou não existe, esconde a HUD
+                bossHud.style.display = 'none';
+            }
         }
 
         function startGame(mode) {
@@ -494,7 +528,7 @@
 
             if (isTestMode) {
                 upgrades.plasmaCannon = true;
-                // upgrades.laserGun = true;
+                upgrades.laserGun = true;
                 upgrades.damage = 10;
                 upgrades.fireRate = 4;
                 upgrades.laserFireRate = 2;
@@ -579,6 +613,7 @@
         }
 
         let bossAlive = false;
+        let bossSpawnedInWave = false;
 
         function spawnEnemy() {
             const a = Math.random() * Math.PI * 2;
@@ -589,7 +624,10 @@
 
             const type = enemyTypes[typeKey];
 
-            if (typeKey === 'boss') bossAlive = true;
+            if (typeKey === 'boss') {
+                if (bossAlive) return; // Checa
+                bossAlive = true;      // Bloqueia NA HORA
+            }
 
             const baseHp = waveEnemyHP;
             const baseSpeed = 2 + wave * 0.15 + level * 0.05;
@@ -792,14 +830,13 @@
             // =============================
             // SISTEMA DE HORDAS (SPAWN)
             // =============================
-            if (waveInProgress) {
-                if (spawnCooldown <= 0 && enemiesToSpawn > 0) {
-                    spawnEnemy();
-                    enemiesToSpawn--;
-                    spawnCooldown = Math.max(8, 30 - wave * 2);
-                } else {
-                    spawnCooldown--;
-                }
+            if (spawnCooldown <= 0 && enemiesToSpawn > 0) {
+                spawnEnemy();
+                enemiesToSpawn--;
+                // Mude a linha abaixo:
+                spawnCooldown = waveSpawnInterval;
+            } else {
+                spawnCooldown--;
             }
 
             // =====================================================
@@ -941,6 +978,7 @@
                         bossAlive = false;
                         score += 1000; // Pontuação bônus do Boss
                         // Loop exclusivo para os vários cristais do Boss
+                        updateHUD();
                         for (let i = 0; i < 10; i++) {
                             loot.push({
                                 x: e.x + (Math.random() - 0.5) * 60,
@@ -1090,18 +1128,25 @@
         }
 
 
-        const BOSS_MIN_DIST = 500; // perto demais → afasta
-        const BOSS_MAX_DIST = 760; // longe demais → aproxima
+        const BOSS_MIN_DIST = 600; // perto demais → afasta
+        const BOSS_MAX_DIST = 860; // longe demabosis → aproxima
 
 
-        function startWave() { //Função que define a dificuldade da horda :: Isso escala: com a wave e com o level
+        function startWave() {
             waveInProgress = true;
+            bossSpawnedInWave = false; // Resetamos o controle aqui
 
+            // Se for wave de boss, apenas 1 inimigo (o próprio boss)
+            if (wave % 10 === 0) {
+                enemiesToSpawn = 1;
+                waveEnemyHP = 100 + (wave * 5); // Opcional: HP customizado para o Boss solitário
+            } else {
+                // Lógica normal para as outras ondas
+                waveEnemyHP = 3 + (wave * 1.5) + (level * 1.0);
+                enemiesToSpawn = 12 + wave * 5 + Math.floor(level * 1.5);
+            }
 
-            waveEnemyHP = 3 + (wave * 1.5) + (level * 1.0);
-
-            enemiesToSpawn = 12 + wave * 5 + Math.floor(level * 1.5)
-
+            waveSpawnInterval = Math.max(30, 40 - (wave * 3));
             spawnCooldown = 0;
             showWaveBanner();
         }
@@ -1129,10 +1174,10 @@
                 {
                     id: 'laser',
                     t: "Protocolo Laser",
-                    d: "Ativa/Melhora o laser: +25% de dano e tiro mais rápido.",
+                    d: "Ativa/Melhora o laser: +50% de dano e tiro mais rápido.",
                     a: () => {
                         upgrades.laserGun = true;
-                        upgrades.laserDamageMult += 0.25;
+                        upgrades.laserDamageMult += 0.50;
                         upgrades.laserFireRate = Math.max(4, upgrades.laserFireRate * 0.82);
                         activeUpgrades.laser++; // Incrementa contador
                     }
@@ -1140,10 +1185,10 @@
                 {
                     id: 'plasma',
                     t: "Canhão Pesado",
-                    d: "Ativa/Melhora o plasma: +100% de dano de explosão.",
+                    d: "Ativa/Melhora o plasma: +50% de dano de explosão.",
                     a: () => {
                         upgrades.plasmaCannon = true;
-                        upgrades.plasmaDamageMult += 1.0;
+                        upgrades.plasmaDamageMult += 0.5;
                         activeUpgrades.plasma++; // Incrementa contador
                     }
                 },
@@ -1159,9 +1204,9 @@
                 {
                     id: 'magnet',
                     t: "Imã de Detritos",
-                    d: "Alcance de coleta de XP aumentado em +75.",
+                    d: "Alcance de coleta de XP aumentado em +50.",
                     a: () => {
-                        upgrades.magnetRange += 75;
+                        upgrades.magnetRange += 50;
                         activeUpgrades.magnet++; // Incrementa contador
                     }
                 },
@@ -1186,9 +1231,9 @@
                 {
                     id: 'damage',
                     t: "Módulo de Potência",
-                    d: "Dano de todas as armas aumentado em +25%.",
+                    d: "Dano de todas as armas aumentado em +50%.",
                     a: () => {
-                        upgrades.damage += 0.25;
+                        upgrades.damage += 0.50;
                         activeUpgrades.damage++; // Incrementa contador
                     }
                 }
@@ -1307,8 +1352,6 @@
                 if (spriteLoaded) ctx.drawImage(spriteImg, xpSpriteDef.sx, xpSpriteDef.sy, xpSpriteDef.sw, xpSpriteDef.sh, p.x - 10, p.y - 10, 20, 20);
             });
 
-            // ... seu código de desenho existente ...
-
             explosionAnimations.forEach((anim, index) => {
                 const p = toS(anim.x, anim.y);
                 const frame = explosionFrames[anim.currentFrame];
@@ -1425,7 +1468,7 @@
 
             // Flash de dano (sem piscar branco feio)
             if (e.type === 'boss' && e.state === 'intro') {
-                ctx.globalAlpha = 0.5;
+                ctx.globalAlpha = 0.2;
             }
 
             if (e.hitTimer > 0) ctx.globalAlpha = 0.7;
@@ -1552,7 +1595,7 @@
                 sprite: 'normal'
             },
             elite: {
-                hpMult: 1.5,
+                hpMult: 2,
                 speedMult: 1.1,
                 sprite: 'elite'
             },
@@ -1562,7 +1605,7 @@
                 sprite: 'tank'
             },
             boss: {
-                hpMult: 90,
+                hpMult: 70,
                 speedMult: 3,
                 sprite: 'boss'
             }
@@ -1573,12 +1616,16 @@
 
         // Função que decide qual inimigo nasce:
         function getEnemyType() {
-            if (wave % 10 === 0) return 'boss';
-            if (wave % 5 === 0 && Math.random() < 0.4) return 'tank';
-            if (wave > 5 && Math.random() < 0.25) return 'elite';
+            // Só retorna boss se for a wave certa E se ainda não spawnou um NESTA wave
+            if (wave % 10 === 0) {
+                return 'boss';
+            }
+
+            // Inimigos normais para as outras waves
+            if (wave > 5 && Math.random() < 0.50) return 'elite';
+            if (wave > 8 && Math.random() < 0.25) return 'tank';
             return 'normal';
         }
-
 
 
         function renderUpgradeHUD() {
