@@ -158,6 +158,32 @@
             background: rgba(20, 0, 0, 0.95);
         }
 
+        #pauseUpgradesContainer {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .upgrade-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid #00ffff;
+            padding: 10px;
+            border-radius: 8px;
+            width: 120px;
+            text-align: center;
+        }
+
+        .upgrade-card img {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto 5px;
+            display: block;
+            image-rendering: pixelated;
+            /* Se for pixel art */
+        }
+
         .controls-hint {
             position: absolute;
             bottom: 20px;
@@ -218,14 +244,13 @@
             max-width: 80%;
         }
 
-        .pause-upgrade-card {
-            background: #111;
-            border: 1px solid #00ffff;
-            padding: 10px;
-            text-align: center;
-            min-width: 70px;
-            border-radius: 8px;
-        }
+        /* .upgrade-card img {
+            width: 50px;
+            height: 50px;
+            display: block;
+            margin: 0 auto 10px;
+            object-fit: contain;
+        } */
 
         .pause-upgrade-count {
             display: block;
@@ -284,7 +309,7 @@
     <div id="pauseMenu">
         <h2 style="color: #00ffff;">SISTEMA PAUSADO</h2>
         <p style="color: #666;">UPGRADES COLETADOS:</p>
-        <div id="pauseUpgrades"></div>
+        <div id="pauseUpgradesContainer"></div>
         <button class="menu-btn" onclick="togglePause()">Retomar</button>
 
     </div>
@@ -328,7 +353,7 @@
         const starSprites = [
             { sx: 129, sy: 18, sw: 55, sh: 42 },
             { sx: 126, sy: 345, sw: 32, sh: 32 },
-            { sx: 100, sy: 188, sw: 21, sh: 20 }
+            { sx: 100, sy: 188, sw: 21, sh: 20 },
         ];
 
 
@@ -348,31 +373,10 @@
         spriteImg.onload = () => { spriteLoaded = true; generateBackground(); };
 
         let bgPattern;
+
         function generateBackground() {
-            const bgCanvas = document.createElement('canvas');
-            const bgCtx = bgCanvas.getContext('2d');
-            bgCanvas.width = 1024; bgCanvas.height = 1024;
-            bgCtx.fillStyle = '#050505';
-            bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
-
-            for (let i = 0; i < 500; i++) {
-                const x = Math.random() * bgCanvas.width;
-                const y = Math.random() * bgCanvas.height;
-                bgCtx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.8 + 0.2})`;
-                bgCtx.beginPath(); bgCtx.arc(x, y, Math.random() * 1.5, 0, Math.PI * 2); bgCtx.fill();
-            }
-
-            if (spriteLoaded) {
-                for (let i = 0; i < 25; i++) {
-                    const s = starSprites[Math.floor(Math.random() * starSprites.length)];
-                    const x = Math.random() * bgCanvas.width;
-                    const y = Math.random() * bgCanvas.height;
-                    const scale = 0.4 + Math.random() * 0.7;
-                    bgCtx.globalAlpha = 0.3 + Math.random() * 0.5;
-                    bgCtx.drawImage(spriteImg, s.sx, s.sy, s.sw, s.sh, x, y, s.sw * scale, s.sh * scale);
-                }
-            }
-            bgPattern = ctx.createPattern(bgCanvas, 'repeat');
+            // Esta função agora é vazia porque o fundo é gerado no drawBackground()
+            console.log("Sistema de fundo infinito ativo.");
         }
 
         // --- GAME STATE ---
@@ -484,6 +488,8 @@
             isTestMode = (mode === 'test');
             gameState = 'playing';
 
+            initStars();
+
 
 
             if (isTestMode) {
@@ -518,6 +524,30 @@
                 document.getElementById('pauseMenu').style.display = 'none';
                 // gameLoop();
 
+            }
+        }
+
+        let starLayers = [];
+
+        function initStars() {
+            starLayers = [];
+            // Criamos 3 camadas: Longe (lenta), Média, Perto (rápida)
+            for (let l = 0; l < 3; l++) {
+                let layer = {
+                    speed: (l + 1) * 0.2, // Velocidade diferente para cada camada
+                    stars: []
+                };
+                // Gerar 100 estrelas procedurais por camada
+                for (let i = 0; i < 100; i++) {
+                    layer.stars.push({
+                        x: Math.random() * canvas.width,
+                        y: Math.random() * canvas.height,
+                        size: Math.random() * (l + 1) * 1.2,
+                        opacity: Math.random() * 0.5 + 0.3,
+                        sprite: Math.random() > 0.8 ? starSprites[Math.floor(Math.random() * starSprites.length)] : null
+                    });
+                }
+                starLayers.push(layer);
             }
         }
 
@@ -1190,9 +1220,15 @@
             };
         }
         function draw() {
-            ctx.fillStyle = bgPattern || '#050505';
+            // ctx.fillStyle = bgPattern || '#050505';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+            drawBackground();
             ctx.globalAlpha = 1;
+
+            ctx.save();
+            ctx.translate(-camera.x, -camera.y);
+            // ... desenha inimigos, balas, jogador, etc ...
+            ctx.restore();
 
             const cx = canvas.width / 2; const cy = canvas.height / 2;
             // const toS = (x, y) => ({ x: x - bosscamera.x + cx, y: y - camera.y + cy });
@@ -1339,6 +1375,40 @@
                 }
             }
 
+            function drawBackground() {
+                // Fundo sólido escuro
+                ctx.fillStyle = '#050505';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                starLayers.forEach(layer => {
+                    ctx.save();
+
+                    layer.stars.forEach(s => {
+                        // Movimento relativo à câmera + velocidade da camada
+                        // O segredo do infinito: Math.abs(x) % largura
+                        let x = (s.x - camera.x * layer.speed) % canvas.width;
+                        let y = (s.y - camera.y * layer.speed) % canvas.height;
+
+                        // Garante que o valor seja sempre positivo para não "sumir"
+                        if (x < 0) x += canvas.width;
+                        if (y < 0) y += canvas.height;
+
+                        if (s.sprite && spriteLoaded) {
+                            ctx.globalAlpha = s.opacity;
+                            ctx.drawImage(spriteImg, s.sprite.sx, s.sprite.sy, s.sprite.sw, s.sprite.sh,
+                                x, y, s.sprite.sw * 0.5, s.sprite.sh * 0.5);
+                        } else {
+                            ctx.fillStyle = `rgba(255, 255, 255, ${s.opacity})`;
+                            ctx.beginPath();
+                            ctx.arc(x, y, s.size, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    });
+
+                    ctx.restore();
+                });
+            }
+
 
             enemies.forEach(drawEnemy);
         }
@@ -1413,26 +1483,62 @@
             damage: new Image()
         };
 
-        upgradeImages.laser.src = "icones/teste.png";
-        upgradeImages.plasma.src = "icones/dedo-duro.png";
+        upgradeImages.laser.src = "icones/laser.png";
+        upgradeImages.plasma.src = "icones/plasma.png";
         upgradeImages.speed.src = "icones/speedIcon.png";
-        upgradeImages.magnet.src = "icones/dedo-duro.png";
-        upgradeImages.fireRate.src = "icones/dedo-duro.png";
-        upgradeImages.damage.src = "icones/dedo-duro.png";
+        upgradeImages.magnet.src = "icones/magnet.png";
+        upgradeImages.fireRate.src = "icones/firerate.png";
+        upgradeImages.damage.src = "icones/damage.png";
 
 
 
         function renderPauseUpgrades() {
-            const container = document.getElementById('pauseUpgrades');
+            const container = document.getElementById('pauseUpgradesContainer');
+            if (!container) return;
+
             container.innerHTML = '';
-            for (const [key, count] of Object.entries(activeUpgrades)) {
-                if (count > 0) {
+
+            // Pegamos os upgrades que você JÁ TEM (activeUpgrades)
+            // Usamos Object.entries para transformar o objeto em uma lista que podemos percorrer
+            Object.entries(activeUpgrades).forEach(([id, quantidade]) => {
+                // Só mostra se você tiver pelo menos 1 nível desse upgrade
+                if (quantidade > 0) {
                     const card = document.createElement('div');
-                    card.className = 'pause-upgrade-card';
-                    card.innerHTML = `<div class="icon-placeholder"></div>
-                              <span class="pause-upgrade-count">x${count}</span>`;
+                    card.className = 'upgrade-card';
+
+                    const img = document.createElement('img');
+                    // Busca a imagem no objeto global que você já definiu
+                    if (upgradeImages[id]) {
+                        img.src = upgradeImages[id].src;
+                    }
+
+                    const title = document.createElement('h3');
+                    // Mapeamento simples de ID para Nome legível
+                    const nomes = {
+                        laser: "Laser",
+                        plasma: "Plasma",
+                        speed: "Velocidade",
+                        magnet: "Ímã",
+                        fireRate: "Cadência",
+                        damage: "Dano"
+                    };
+                    title.textContent = nomes[id] || id;
+
+                    const count = document.createElement('span');
+                    count.className = 'pause-upgrade-count';
+                    count.textContent = 'Nível: ' + quantidade;
+
+                    card.appendChild(img);
+                    card.appendChild(title);
+                    card.appendChild(count);
+
                     container.appendChild(card);
                 }
+            });
+
+            // Se não tiver nenhum upgrade ainda
+            if (container.innerHTML === '') {
+                container.innerHTML = '<p style="color: #444;">Nenhum sistema instalado ainda.</p>';
             }
         }
         //INIMIGOS DEFINIDOS!
